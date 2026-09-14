@@ -77,8 +77,8 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: err.message || 'حدث خطأ في السيرفر' });
 });
+app.listen(PORT, '0.0.0.0', () => {
 
-app.listen(PORT, () => {
   console.log(`
 🟢 المتجر شغال على: http://localhost:${PORT}
 🔐 لوحة الأدمن: http://localhost:${PORT}/admin/login.html
