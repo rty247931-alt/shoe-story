@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تتبع الطلب</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header id="siteHeader" class="site-header"></header>
+
+<section class="section">
+  <div class="container" style="max-width:760px">
+    <h2>تتبع طلبك</h2>
+    <div style="display:flex;gap:10px;margin-bottom:30px">
+      <input id="orderIdInput" placeholder="رقم الطلب أو رقم الفاتورة" style="flex:1;padding:12px 14px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--ink)">
+      <button class="btn btn-gold" onclick="search()">بحث</button>
+    </div>
+    <div id="result"></div>
+  </div>
+</section>
+
+<footer id="siteFooter" class="site-footer"></footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/cart.js"></script>
+<script src="/js/common.js"></script>
+<script>
+const STEPS = ['جديد', 'قيد التنفيذ', 'تم الشحن', 'مكتمل'];
+
+async function init(){
+  await renderHeader('track');
+  const id = new URLSearchParams(location.search).get('id');
+  if (id) { document.getElementById('orderIdInput').value = id; search(); }
+}
+
+async function search(){
+  const id = document.getElementById('orderIdInput').value.trim();
+  const result = document.getElementById('result');
+  if (!id) return;
+  result.innerHTML = 'جاري البحث...';
+  try {
+    const o = await api('/orders/track/' + id);
+    const stepIndex = STEPS.indexOf(o.status);
+    const cancelled = o.status === 'ملغي';
+    result.innerHTML = `
+      <div class="panel">
+        <div class="panel-head"><h3>طلب رقم #${o.invoiceNumber}</h3><span class="status-pill status-${o.status.replace(/\s/g,'-')}">${o.status}</span></div>
+        ${cancelled ? '' : `
+        <div class="track-steps">
+          ${STEPS.map((s,i)=>`
+            <div class="track-step ${i<=stepIndex?'done':''}">
+              <div class="dot">${i+1}</div>
+              <div class="lbl">${s}</div>
+            </div>`).join('')}
+        </div>`}
+        <div style="margin-top:20px;color:var(--ink-soft)">
+          <div>📍 العنوان: ${escapeHtml(o.address)}</div>
+          <div>📞 الهاتف: ${escapeHtml(o.phone)}</div>
+          <div>💳 وسيلة الدفع: ${paymentLabel(o.paymentMethod)}</div>
+        </div>
+        <hr style="border-color:var(--line);margin:20px 0">
+        ${o.items.map(it => `
+          <div class="summary-row"><span>${escapeHtml(it.name)} ${it.size?'(مقاس '+it.size+')':''} × ${it.qty}</span><span>${money(it.price*it.qty)}</span></div>
+        `).join('')}
+        <div class="summary-row"><span>الشحن</span><span>${money(o.shippingFee)}</span></div>
+        <div class="summary-row total"><span>الإجمالي</span><span>${money(o.total)}</span></div>
+      </div>`;
+  } catch(e){
+    result.innerHTML = `<div class="empty-state"><div class="icon">❓</div>${e.message}</div>`;
+  }
+}
+function paymentLabel(k){
+  return {vodafone:'فودافون كاش', instapay:'إنستا باي', card:'بطاقة ائتمان', cod:'الدفع عند الاستلام'}[k] || k;
+}
+init();
+</script>
+</body>
+</html>
