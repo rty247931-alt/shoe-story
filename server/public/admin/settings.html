@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إعدادات المتجر</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<script src="/js/api.js"></script>
+<script src="/js/admin-common.js"></script>
+<script>
+if (guardAdmin()) { renderAdminShell('settings', 'إعدادات المتجر'); init(); }
+let settings, logoUrl = '';
+
+async function init(){
+  settings = await api('/settings', { auth:true });
+  logoUrl = settings.logo || '';
+  document.getElementById('adminContent').innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h3>الهوية العامة</h3></div>
+      <div class="grid-2">
+        <div class="field"><label>اسم المتجر</label><input id="storeName" value="${escapeHtml(settings.storeName||'')}"></div>
+        <div class="field"><label>رسالة ترحيب / بانر</label><input id="welcomeMessage" value="${escapeHtml(settings.welcomeMessage||'')}"></div>
+      </div>
+      <div class="field">
+        <label>شعار المتجر (Logo)</label>
+        <input type="file" id="logoInput" accept="image/*" onchange="uploadLogo(this.files)">
+        <div class="img-thumb-row" id="logoThumb"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>الألوان الرئيسية</h3></div>
+      <div class="grid-2">
+        <div class="field"><label>اللون الأساسي</label><input type="color" id="primaryColor" value="${settings.primaryColor||'#0b0b0b'}"></div>
+        <div class="field"><label>لون التمييز (الذهبي)</label><input type="color" id="accentColor" value="${settings.accentColor||'#c9a227'}"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>بيانات التواصل</h3></div>
+      <div class="grid-3">
+        <div class="field"><label>رقم الهاتف</label><input id="phone" value="${escapeHtml(settings.phone||'')}"></div>
+        <div class="field"><label>واتساب</label><input id="whatsapp" value="${escapeHtml(settings.whatsapp||'')}"></div>
+        <div class="field"><label>البريد الإلكتروني</label><input id="email" value="${escapeHtml(settings.email||'')}"></div>
+      </div>
+      <div class="field"><label>العنوان</label><input id="address" value="${escapeHtml(settings.address||'')}"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>بيانات دخول الأدمن</h3></div>
+      <p style="color:var(--ink-soft);font-size:.9rem">لتغيير بريد أو كلمة سر الأدمن اذهب إلى <a href="/account.html" style="color:var(--gold);font-weight:700">صفحة حسابي</a> بعد تسجيل الدخول.</p>
+    </div>
+
+    <button class="btn btn-gold" onclick="save()">حفظ الإعدادات</button>
+  `;
+  renderLogoThumb();
+}
+
+async function uploadLogo(files){
+  const fd = new FormData();
+  fd.append('images', files[0]);
+  try {
+    const res = await api('/upload', { method:'POST', auth:true, isForm:true, body: fd });
+    logoUrl = res.urls[0];
+    renderLogoThumb();
+  } catch(e){ toast(e.message, true); }
+}
+function renderLogoThumb(){
+  document.getElementById('logoThumb').innerHTML = logoUrl ? `<div class="img-thumb"><img src="${logoUrl}"><button onclick="logoUrl='';renderLogoThumb()">✕</button></div>` : '';
+}
+
+async function save(){
+  const body = {
+    storeName: document.getElementById('storeName').value.trim(),
+    welcomeMessage: document.getElementById('welcomeMessage').value.trim(),
+    logo: logoUrl,
+    primaryColor: document.getElementById('primaryColor').value,
+    accentColor: document.getElementById('accentColor').value,
+    phone: document.getElementById('phone').value.trim(),
+    whatsapp: document.getElementById('whatsapp').value.trim(),
+    email: document.getElementById('email').value.trim(),
+    address: document.getElementById('address').value.trim()
+  };
+  try {
+    await api('/settings', { method:'PUT', auth:true, body });
+    toast('تم حفظ الإعدادات بنجاح');
+  } catch(e){ toast(e.message, true); }
+}
+</script>
+</body>
+</html>
