@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة التحكم</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+</script>
+</head>
+<body>
+<script src="/js/api.js"></script>
+<script src="/js/admin-common.js"></script>
+<script>
+if (guardAdmin()) {
+  renderAdminShell('dashboard', 'لوحة التحكم');
+  init();
+}
+
+async function init(){
+  const d = await api('/settings/dashboard', { auth:true });
+  document.getElementById('adminContent').innerHTML = `
+    <div class="stat-cards">
+      <div class="stat-card"><div class="label">مبيعات اليوم</div><div class="value gold">${money(d.salesToday)}</div></div>
+      <div class="stat-card"><div class="label">مبيعات الشهر</div><div class="value">${money(d.salesMonth)}</div></div>
+      <div class="stat-card"><div class="label">مبيعات السنة</div><div class="value">${money(d.salesYear)}</div></div>
+      <div class="stat-card"><div class="label">طلبات جديدة</div><div class="value gold">${d.newOrders}</div></div>
+    </div>
+    <div class="stat-cards">
+      <div class="stat-card"><div class="label">إجمالي الطلبات</div><div class="value">${d.totalOrders}</div></div>
+      <div class="stat-card"><div class="label">إجمالي المنتجات</div><div class="value">${d.totalProducts}</div></div>
+      <div class="stat-card"><div class="label">إجمالي العملاء</div><div class="value">${d.totalCustomers}</div></div>
+      <div class="stat-card"><div class="label">إجمالي الأقسام</div><div class="value">—</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-head"><h3>المبيعات آخر 7 أيام</h3></div>
+        <div style="display:flex;align-items:flex-end;gap:10px;height:160px">
+          ${chartBars(d.last7)}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>الأكثر مبيعاً</h3></div>
+        ${d.topProducts.length ? d.topProducts.map((p,i)=>`
+          <div class="summary-row"><span>${i+1}. ${escapeHtml(p.name)}</span><span>${p.qty} قطعة</span></div>
+        `).join('') : '<p style="color:var(--ink-soft)">لا توجد بيانات مبيعات بعد</p>'}
+      </div>
+    </div>
+  `;
+}
+
+function chartBars(days){
+  const max = Math.max(1, ...days.map(d=>d.total));
+  return days.map(d => `
+    <div style="flex:1;text-align:center">
+      <div style="background:var(--gold);border-radius:3px 3px 0 0;height:${Math.max(4,(d.total/max)*130)}px;margin-bottom:6px" title="${money(d.total)}"></div>
+      <div style="font-size:.7rem;color:var(--ink-soft)">${d.date.slice(5)}</div>
+    </div>`).join('');
+}
+</script>
+</body>
+</html>

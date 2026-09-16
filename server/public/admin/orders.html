@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إدارة الطلبات</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+</script>
+<style>
+@media print {
+  .admin-side, .admin-topbar, .panel-head, .table-wrap, .modal-overlay > .modal-box > div:last-child { display:none !important; }
+  .modal-overlay { position:static !important; background:none !important; display:block !important; }
+  .modal-box { box-shadow:none !important; border:none !important; }
+}
+</style>
+</head>
+<body>
+<script src="/js/api.js"></script>
+<script src="/js/admin-common.js"></script>
+<script>
+if (guardAdmin()) { renderAdminShell('orders', 'إدارة الطلبات'); init(); }
+const STATUSES = ['جديد','قيد التنفيذ','تم الشحن','مكتمل','ملغي'];
+let currentOrder = null;
+
+async function init(){
+  document.getElementById('adminContent').innerHTML = `
+    <div class="chip-row" style="margin-bottom:18px" id="statusFilters">
+      <span class="chip selected" data-v="" onclick="filterStatus('')">الكل</span>
+      ${STATUSES.map(s=>`<span class="chip" data-v="${s}" onclick="filterStatus('${s}')">${s}</span>`).join('')}
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>التاريخ</th><th>الإجمالي</th><th>وسيلة الدفع</th><th>الحالة</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="modal-overlay" id="modal"><div class="modal-box" id="modalBody"></div></div>
+  `;
+  load('');
+}
+
+async function filterStatus(s){
+  qsa('#statusFilters .chip').forEach(c=>c.classList.toggle('selected', c.dataset.v===s));
+  load(s);
+}
+
+async function load(status){
+  const orders = await api('/orders' + (status ? '?status='+encodeURIComponent(status) : ''), { auth:true });
+  document.getElementById('rows').innerHTML = orders.map(o => `
+    <tr>
+      <td>#${o.invoiceNumber}</td>
+      <td>${escapeHtml(o.guestName||'—')}<br><span style="color:var(--ink-soft);font-size:.8rem">${escapeHtml(o.phone)}</span></td>
+      <td>${new Date(o.createdAt).toLocaleDateString('ar-EG')}</td>
+      <td>${money(o.total)}</td>
+      <td>${paymentLabel(o.paymentMethod)}</td>
+      <td><span class="status-pill status-${o.status.replace(/\s/g,'-')}">${o.status}</span></td>
+      <td><button class="btn btn-sm btn-outline" onclick="viewOrder('${o.id}')">تفاصيل</button></td>
+    </tr>`).join('') || '<tr><td colspan="7"><div class="empty-state">لا توجد طلبات</div></td></tr>';
+}
+function paymentLabel(k){ return {vodafone:'فودافون كاش', instapay:'إنستا باي', card:'بطاقة', cod:'عند الاستلام'}[k] || k; }
+
+async function viewOrder(id){
+  const orders = await api('/orders', { auth:true });
+  currentOrder = orders.find(o=>o.id===id);
+  renderModal();
+  document.getElementById('modal').classList.add('open');
+}
+
+function renderModal(){
+  const o = currentOrder;
+  document.getElementById('modalBody').innerHTML = `
+    <div class="panel-head"><h3>فاتورة رقم #${o.invoiceNumber}</h3><span class="status-pill status-${o.status.replace(/\s/g,'-')}">${o.status}</span></div>
+    <p style="color:var(--ink-soft)">
+      العميل: ${escapeHtml(o.guestName||'—')} — ${escapeHtml(o.phone)}<br>
+      العنوان: ${escapeHtml(o.address)}<br>
+      التاريخ: ${new Date(o.createdAt).toLocaleString('ar-EG')}<br>
+      وسيلة الدفع: ${paymentLabel(o.paymentMethod)}
+    </p>
+    <hr style="border-color:var(--line)">
+    ${o.items.map(it=>`<div class="summary-row"><span>${escapeHtml(it.name)} ${it.size?'(مقاس '+it.size+')':''} × ${it.qty}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
+    <div class="summary-row"><span>الشحن</span><span>${money(o.shippingFee)}</span></div>
+    <div class="summary-row total"><span>الإجمالي</span><span>${money(o.total)}</span></div>
+    <div class="field" style="margin-top:20px">
+      <label>تغيير حالة الطلب</label>
+      <select id="statusSelect" onchange="changeStatus(this.value)">
+        ${STATUSES.map(s=>`<option value="${s}" ${s===o.status?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-outline btn-block" onclick="window.print()">🖨️ طباعة الفاتورة</button>
+      <button class="btn btn-gold" onclick="closeModal()">إغلاق</button>
+    </div>
+  `;
+}
+async function changeStatus(status){
+  await api('/orders/'+currentOrder.id+'/status', { method:'PUT', auth:true, body:{ status } });
+  currentOrder.status = status;
+  toast('تم تحديث حالة الطلب');
+  renderModal();
+  load('');
+}
+function closeModal(){ document.getElementById('modal').classList.remove('open'); }
+</script>
+</body>
+</html>

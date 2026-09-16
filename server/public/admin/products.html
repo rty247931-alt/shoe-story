@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إدارة المنتجات</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+</script>
+</head>
+<body>
+<script src="/js/api.js"></script>
+<script src="/js/admin-common.js"></script>
+<script>
+if (guardAdmin()) { renderAdminShell('products', 'إدارة المنتجات'); init(); }
+
+let categories = [];
+const SIZES = ['36','37','38','39','40','41','42','43','44','45'];
+let editingId = null;
+let formImages = [];
+let formSizes = [];
+let formColors = [];
+
+async function init(){
+  categories = await api('/categories');
+  document.getElementById('adminContent').innerHTML = `
+    <div class="panel-head" style="margin-bottom:18px">
+      <div></div>
+      <button class="btn btn-gold" onclick="openForm()">+ إضافة منتج جديد</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>الصورة</th><th>الاسم</th><th>القسم</th><th>السعر</th><th>المخزون</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    ${modalHtml()}
+  `;
+  load();
+}
+
+async function load(){
+  const products = await api('/products?active=all');
+  document.getElementById('rows').innerHTML = products.map(p => `
+    <tr>
+      <td><div style="width:46px;height:46px;border-radius:3px;overflow:hidden;background:var(--bg-soft)">${(p.images||[])[0]?`<img src="${p.images[0]}" style="width:100%;height:100%;object-fit:cover">`:''}</div></td>
+      <td>${escapeHtml(p.name)}</td>
+      <td>${escapeHtml(catName(p.categoryId))}</td>
+      <td>${money(p.discountPrice||p.price)}</td>
+      <td>${p.stock ?? '-'}</td>
+      <td><label class="toggle"><input type="checkbox" ${p.active?'checked':''} onchange="toggleActive('${p.id}', this.checked)"><span class="slider"></span></label></td>
+      <td>
+        <button class="btn btn-sm btn-outline" onclick='openForm(${JSON.stringify(p).replace(/'/g,"&apos;")})'>تعديل</button>
+        <button class="btn btn-sm btn-danger" onclick="del('${p.id}')">حذف</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="7"><div class="empty-state">لا توجد منتجات بعد</div></td></tr>';
+}
+function catName(id){ const c = categories.find(c=>c.id===id); return c ? c.name : '—'; }
+
+function modalHtml(){
+  return `
+  <div class="modal-overlay" id="modal">
+    <div class="modal-box">
+      <h3 id="modalTitle">إضافة منتج</h3>
+      <div class="field"><label>اسم المنتج</label><input id="fName"></div>
+      <div class="field"><label>الوصف</label><textarea id="fDesc" rows="3"></textarea></div>
+      <div class="grid-2">
+        <div class="field"><label>السعر</label><input id="fPrice" type="number"></div>
+        <div class="field"><label>سعر بعد الخصم (اختياري)</label><input id="fDiscount" type="number"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>القسم</label><select id="fCategory"><option value="">بدون قسم</option>${categories.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>المخزون</label><input id="fStock" type="number" value="100"></div>
+      </div>
+      <div class="field">
+        <label>المقاسات المتاحة</label>
+        <div class="chip-row" id="sizeChips">${SIZES.map(s=>`<span class="chip" data-v="${s}" onclick="toggleChip(this, formSizes, '${s}')">${s}</span>`).join('')}</div>
+      </div>
+      <div class="field">
+        <label>الألوان المتاحة</label>
+        <div style="display:flex;gap:8px">
+          <input id="colorInput" placeholder="اكتب اسم اللون واضغط إضافة">
+          <button class="btn btn-outline btn-sm" onclick="addColor()">إضافة</button>
+        </div>
+        <div class="chip-row" id="colorChips" style="margin-top:10px"></div>
+      </div>
+      <div class="field">
+        <label>الصور</label>
+        <input type="file" id="fileInput" multiple accept="image/*" onchange="uploadImages(this.files)">
+        <div class="img-thumb-row" id="imgThumbs"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <button class="btn btn-gold btn-block" onclick="saveProduct()">حفظ</button>
+        <button class="btn btn-outline" onclick="closeForm()">إلغاء</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function openForm(p){
+  editingId = p ? p.id : null;
+  document.getElementById('modalTitle').textContent = p ? 'تعديل منتج' : 'إضافة منتج';
+  document.getElementById('fName').value = p ? p.name : '';
+  document.getElementById('fDesc').value = p ? (p.description||'') : '';
+  document.getElementById('fPrice').value = p ? p.price : '';
+  document.getElementById('fDiscount').value = p && p.discountPrice ? p.discountPrice : '';
+  document.getElementById('fCategory').value = p ? (p.categoryId||'') : '';
+  document.getElementById('fStock').value = p ? p.stock : 100;
+  formImages = p ? [...(p.images||[])] : [];
+  formSizes = p ? [...(p.sizes||[])] : [];
+  formColors = p ? [...(p.colors||[])] : [];
+  renderThumbs(); renderColorChips();
+  qsa('#sizeChips .chip').forEach(c => c.classList.toggle('selected', formSizes.includes(c.dataset.v)));
+  document.getElementById('modal').classList.add('open');
+}
+function closeForm(){ document.getElementById('modal').classList.remove('open'); }
+
+function toggleChip(el, arr, val){
+  const idx = arr.indexOf(val);
+  if (idx > -1) { arr.splice(idx,1); el.classList.remove('selected'); }
+  else { arr.push(val); el.classList.add('selected'); }
+}
+function addColor(){
+  const input = document.getElementById('colorInput');
+  const v = input.value.trim();
+  if (!v) return;
+  formColors.push(v); input.value=''; renderColorChips();
+}
+function renderColorChips(){
+  document.getElementById('colorChips').innerHTML = formColors.map((c,i)=>`<span class="chip selected" onclick="removeColor(${i})">${escapeHtml(c)} ✕</span>`).join('');
+}
+function removeColor(i){ formColors.splice(i,1); renderColorChips(); }
+
+async function uploadImages(files){
+  const fd = new FormData();
+  [...files].forEach(f => fd.append('images', f));
+  try {
+    const res = await api('/upload', { method:'POST', auth:true, isForm:true, body: fd });
+    formImages.push(...res.urls);
+    renderThumbs();
+  } catch(e){ toast(e.message, true); }
+}
+function renderThumbs(){
+  document.getElementById('imgThumbs').innerHTML = formImages.map((im,i)=>`
+    <div class="img-thumb"><img src="${im}"><button onclick="removeImg(${i})">✕</button></div>`).join('');
+}
+function removeImg(i){ formImages.splice(i,1); renderThumbs(); }
+
+async function saveProduct(){
+  const body = {
+    name: document.getElementById('fName').value.trim(),
+    description: document.getElementById('fDesc').value.trim(),
+    price: document.getElementById('fPrice').value,
+    discountPrice: document.getElementById('fDiscount').value || null,
+    categoryId: document.getElementById('fCategory').value || null,
+    stock: document.getElementById('fStock').value,
+    images: formImages, sizes: formSizes, colors: formColors
+  };
+  if (!body.name || !body.price) return toast('اسم المنتج والسعر مطلوبان', true);
+  try {
+    if (editingId) await api('/products/'+editingId, { method:'PUT', auth:true, body });
+    else await api('/products', { method:'POST', auth:true, body });
+    toast('تم الحفظ بنجاح');
+    closeForm(); load();
+  } catch(e){ toast(e.message, true); }
+}
+
+async function toggleActive(id, active){
+  await api('/products/'+id, { method:'PUT', auth:true, body:{ active } });
+}
+async function del(id){
+  if (!confirm('هل تريد حذف هذا المنتج؟')) return;
+  await api('/products/'+id, { method:'DELETE', auth:true });
+  toast('تم الحذف'); load();
+}
+</script>
+</body>
+</html>
