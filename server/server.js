@@ -63,7 +63,8 @@ app.use('/api/settings', require('./routes/settings'));
 app.use('/api/upload', require('./routes/upload'));
 
 // Serve frontend
-const publicDir = path.join(__dirname, '..', 'public');
+const publicDir = path.join(__dirname, 'public');
+console.log('DEBUG publicDir =', publicDir);
 app.use(express.static(publicDir));
 
 app.get('*', (req, res, next) => {
