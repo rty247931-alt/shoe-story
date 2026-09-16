@@ -87,8 +87,6 @@ router.get('/track/:id', auth(false), (req, res) => {
   res.json(order);
 });
 
-});
-
 // Admin: list all orders
 router.get('/', auth(true), adminOnly, (req, res) => {
   const db = readDB();
