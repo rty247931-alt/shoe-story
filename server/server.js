@@ -67,7 +67,7 @@ const publicDir = path.join(__dirname, 'public');
 console.log('DEBUG publicDir =', publicDir);
 app.use(express.static(publicDir));
 
-app.get('*', (req, res, next) => {
+app.get('/*splat', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
   res.sendFile(path.join(publicDir, req.path.endsWith('.html') ? req.path : 'index.html'), err => {
     if (err) res.sendFile(path.join(publicDir, 'index.html'));
