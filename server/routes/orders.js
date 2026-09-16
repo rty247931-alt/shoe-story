@@ -70,13 +70,23 @@ router.get('/mine', auth(true), (req, res) => {
   const orders = db.orders.filter(o => o.userId === req.user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json(orders);
 });
-
-// Track single order (public by id, for guest tracking)
-router.get('/track/:id', (req, res) => {
+// Track order — private: يحتاج تطابق رقم الهاتف، أو يكون صاحب الطلب/أدمن
+router.get('/track/:id', auth(false), (req, res) => {
   const db = readDB();
   const order = db.orders.find(o => o.id === req.params.id || String(o.invoiceNumber) === req.params.id);
   if (!order) return res.status(404).json({ error: 'الطلب غير موجود' });
+
+  const isOwner = req.user && order.userId === req.user.id;
+  const isAdmin = req.user && req.user.role === 'admin';
+  const phone = (req.query.phone || '').trim();
+  const phoneMatches = phone && order.phone && phone === order.phone.trim();
+
+  if (!isOwner && !isAdmin && !phoneMatches) {
+    return res.status(403).json({ error: 'أدخل رقم الهاتف المستخدم في الطلب للتأكد من هويتك' });
+  }
   res.json(order);
+});
+
 });
 
 // Admin: list all orders
