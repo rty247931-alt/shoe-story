@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حسابي</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+</script>
+</head>
+<body>
+<header id="siteHeader" class="site-header"></header>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <div><h2>حسابي</h2></div>
+      <button class="btn btn-outline btn-sm" onclick="logout()">تسجيل الخروج</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>بياناتي</h3></div>
+      <div class="grid-2">
+        <div class="field"><label>الاسم</label><input id="pName"></div>
+        <div class="field"><label>الهاتف</label><input id="pPhone"></div>
+      </div>
+      <div class="field"><label>العنوان</label><textarea id="pAddress" rows="2"></textarea></div>
+      <div class="field"><label>كلمة سر جديدة (اختياري)</label><input id="pPassword" type="password" placeholder="اتركه فارغاً إن لم ترغب بالتغيير"></div>
+      <button class="btn btn-gold" onclick="saveProfile()">حفظ التعديلات</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>طلباتي</h3></div>
+      <div id="ordersList"></div>
+    </div>
+  </div>
+</section>
+
+<footer id="siteFooter" class="site-footer"></footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/cart.js"></script>
+<script src="/js/common.js"></script>
+<script>
+async function init(){
+  if (!getToken()) { location.href = '/login.html'; return; }
+  await renderHeader();
+  const me = await api('/auth/me', { auth:true });
+  document.getElementById('pName').value = me.name;
+  document.getElementById('pPhone').value = me.phone || '';
+  document.getElementById('pAddress').value = me.address || '';
+
+  const orders = await api('/orders/mine', { auth:true });
+  document.getElementById('ordersList').innerHTML = orders.map(o => `
+    <div class="cart-item" style="grid-template-columns:1fr auto">
+      <div>
+        <div style="font-weight:700">طلب رقم #${o.invoiceNumber}</div>
+        <div style="color:var(--ink-soft);font-size:.85rem;margin-top:4px">${new Date(o.createdAt).toLocaleDateString('ar-EG')} • ${o.items.length} منتج • ${money(o.total)}</div>
+      </div>
+      <div style="text-align:left">
+        <span class="status-pill status-${o.status.replace(/\s/g,'-')}">${o.status}</span>
+        <div><a href="/track.html?id=${o.id}" style="color:var(--gold);font-size:.85rem;font-weight:700">تتبع الطلب ←</a></div>
+      </div>
+    </div>`).join('') || '<div class="empty-state"><div class="icon">📦</div>لا توجد طلبات بعد</div>';
+}
+
+async function saveProfile(){
+  const body = {
+    name: document.getElementById('pName').value.trim(),
+    phone: document.getElementById('pPhone').value.trim(),
+    address: document.getElementById('pAddress').value.trim(),
+  };
+  const pass = document.getElementById('pPassword').value;
+  if (pass) body.password = pass;
+  try {
+    await api('/auth/me', { method:'PUT', auth:true, body });
+    toast('تم حفظ التعديلات');
+    document.getElementById('pPassword').value = '';
+  } catch(e){ toast(e.message, true); }
+}
+function logout(){ clearToken(); location.href = '/index.html'; }
+init();
+</script>
+</body>
+</html>

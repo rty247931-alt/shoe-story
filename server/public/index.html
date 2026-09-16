@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>متجر الأحذية</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+</script>
+</head>
+<body>
+<header id="siteHeader" class="site-header"></header>
+
+<section class="hero">
+  <div class="container hero-grid">
+    <div>
+      <div class="hero-eyebrow">مجموعة الموسم الجديد</div>
+      <h1 id="heroTitle">خطوتك التالية تبدأ من هنا</h1>
+      <p id="heroText">تشكيلة مختارة من أفخم الأحذية الرجالي والحريمي والأطفال، بجودة عالية وأسعار تنافسية وتوصيل لجميع المحافظات.</p>
+      <div class="hero-actions">
+        <a href="/store.html" class="btn btn-gold">تسوّق الآن</a>
+        <a href="#categories" class="btn btn-outline">تصفح الأقسام</a>
+      </div>
+    </div>
+    <div class="hero-visual">👟</div>
+  </div>
+</section>
+
+<section class="section" id="categories">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>تسوّق حسب القسم</h2>
+        <p>اختر القسم اللي يناسبك</p>
+      </div>
+    </div>
+    <div class="cats-grid" id="catsGrid"></div>
+  </div>
+</section>
+
+<section class="section" style="background:var(--bg-soft)">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>منتجات مميزة</h2>
+        <p>أحدث الإضافات في المتجر</p>
+      </div>
+      <a href="/store.html" class="btn btn-outline btn-sm">عرض الكل</a>
+    </div>
+    <div class="products-grid" id="featuredGrid"></div>
+  </div>
+</section>
+
+<footer id="siteFooter" class="site-footer"></footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/cart.js"></script>
+<script src="/js/common.js"></script>
+<script>
+async function init(){
+  const s = await loadSettings();
+  document.title = s.storeName || 'متجر الأحذية';
+  if (s.welcomeMessage) document.getElementById('heroText').textContent = s.welcomeMessage;
+  await renderHeader('home');
+
+  const cats = await api('/categories');
+  document.getElementById('catsGrid').innerHTML = cats.map(c => `
+    <a class="cat-card" href="/store.html?category=${c.id}">
+      ${c.image ? `<img src="${c.image}">` : ''}
+      <span>${escapeHtml(c.name)}</span>
+    </a>`).join('') || '<p>لا توجد أقسام بعد</p>';
+
+  const products = await api('/products');
+  const featured = products.slice(-8).reverse();
+  document.getElementById('featuredGrid').innerHTML = featured.map(productCard).join('') ||
+    '<div class="empty-state"><div class="icon">👟</div>لا توجد منتجات بعد</div>';
+}
+
+function productCard(p){
+  const img = (p.images||[])[0];
+  return `
+  <a class="product-card" href="/product.html?id=${p.id}">
+    <div class="product-thumb">${img ? `<img src="${img}">` : '👟'}</div>
+    <div class="product-info">
+      <h3>${escapeHtml(p.name)}</h3>
+      <div class="price-row">
+        <span class="price">${money(p.discountPrice || p.price)}</span>
+        ${p.discountPrice ? `<span class="price-old">${money(p.price)}</span>` : ''}
+      </div>
+    </div>
+  </a>`;
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>المتجر</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+</script>
+</head>
+<body>
+<header id="siteHeader" class="site-header"></header>
+
+<section class="section">
+  <div class="container store-layout">
+    <aside class="filters">
+      <h4>الأقسام</h4>
+      <div class="filter-group" id="catFilters"></div>
+      <h4>المقاس</h4>
+      <div class="filter-group chip-row" id="sizeFilters">
+        ${''}
+      </div>
+      <h4>السعر</h4>
+      <div class="filter-group range-inputs">
+        <input type="number" id="minPrice" placeholder="من">
+        <input type="number" id="maxPrice" placeholder="إلى">
+      </div>
+      <button class="btn btn-gold btn-block btn-sm" onclick="applyFilters()">تطبيق الفلاتر</button>
+      <button class="btn btn-outline btn-block btn-sm" style="margin-top:8px" onclick="resetFilters()">إعادة تعيين</button>
+    </aside>
+    <div>
+      <div class="section-head">
+        <div>
+          <h2>المتجر</h2>
+          <p id="resultCount"></p>
+        </div>
+        <input type="text" id="searchBox" placeholder="ابحث عن منتج..." style="padding:11px 16px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--ink);min-width:220px">
+      </div>
+      <div class="products-grid" id="grid"></div>
+    </div>
+  </div>
+</section>
+
+<footer id="siteFooter" class="site-footer"></footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/cart.js"></script>
+<script src="/js/common.js"></script>
+<script>
+const SIZES = ['36','37','38','39','40','41','42','43','44','45'];
+let selectedCategory = new URLSearchParams(location.search).get('category') || '';
+let selectedSize = '';
+
+async function init(){
+  await renderHeader('store');
+  const cats = await api('/categories');
+  document.getElementById('catFilters').innerHTML = `
+    <label class="filter-opt"><input type="radio" name="cat" value="" ${!selectedCategory?'checked':''} onchange="selectedCategory='';load()"> الكل</label>
+    ` + cats.map(c => `<label class="filter-opt"><input type="radio" name="cat" value="${c.id}" ${selectedCategory===c.id?'checked':''} onchange="selectedCategory='${c.id}';load()"> ${escapeHtml(c.name)}</label>`).join('');
+
+  document.getElementById('sizeFilters').innerHTML = SIZES.map(s => `<span class="chip" data-size="${s}" onclick="pickSize('${s}')">${s}</span>`).join('');
+
+  document.getElementById('searchBox').addEventListener('input', debounce(load, 400));
+  load();
+}
+
+function pickSize(s){
+  selectedSize = selectedSize === s ? '' : s;
+  qsa('.chip').forEach(c => c.classList.toggle('selected', c.dataset.size === selectedSize));
+  load();
+}
+
+function applyFilters(){ load(); }
+function resetFilters(){
+  selectedCategory=''; selectedSize='';
+  document.getElementById('minPrice').value='';
+  document.getElementById('maxPrice').value='';
+  document.getElementById('searchBox').value='';
+  qsa('.chip').forEach(c=>c.classList.remove('selected'));
+  qsa('input[name=cat]')[0].checked = true;
+  load();
+}
+
+function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+async function load(){
+  const params = new URLSearchParams();
+  if (selectedCategory) params.set('category', selectedCategory);
+  if (selectedSize) params.set('size', selectedSize);
+  const min = document.getElementById('minPrice').value;
+  const max = document.getElementById('maxPrice').value;
+  if (min) params.set('minPrice', min);
+  if (max) params.set('maxPrice', max);
+  const search = document.getElementById('searchBox').value;
+  if (search) params.set('search', search);
+
+  const products = await api('/products?' + params.toString());
+  document.getElementById('resultCount').textContent = products.length + ' منتج';
+  document.getElementById('grid').innerHTML = products.map(productCard).join('') ||
+    '<div class="empty-state"><div class="icon">🔍</div>لا توجد منتجات مطابقة</div>';
+}
+
+function productCard(p){
+  const img = (p.images||[])[0];
+  return `
+  <a class="product-card" href="/product.html?id=${p.id}">
+    <div class="product-thumb">${img ? `<img src="${img}">` : '👟'}</div>
+    <div class="product-info">
+      <h3>${escapeHtml(p.name)}</h3>
+      <div class="price-row">
+        <span class="price">${money(p.discountPrice || p.price)}</span>
+        ${p.discountPrice ? `<span class="price-old">${money(p.price)}</span>` : ''}
+      </div>
+    </div>
+  </a>`;
+}
+init();
+</script>
+</body>
+</html>
