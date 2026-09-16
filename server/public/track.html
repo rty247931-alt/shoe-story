@@ -45,13 +45,14 @@ async function init(){
   if (id) { document.getElementById('orderIdInput').value = id; search(); }
 }
 
-async function search(){
+  async function search(){
   const id = document.getElementById('orderIdInput').value.trim();
   const result = document.getElementById('result');
   if (!id) return;
   result.innerHTML = 'جاري البحث...';
   try {
     const o = await api('/orders/track/' + id);
+
     const stepIndex = STEPS.indexOf(o.status);
     const cancelled = o.status === 'ملغي';
     result.innerHTML = `
