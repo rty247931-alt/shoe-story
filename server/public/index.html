@@ -1102,5 +1102,48 @@ document.getElementById('year').textContent = new Date().getFullYear();
   await tryRestoreCustomer();
 })();
 </script>
+  <script>
+  // دالة التعامل مع البحث عند الضغط على زر البحث أو الإدخال
+  async function handleSearch(searchTerm) {
+    if (!searchTerm) return;
+
+    try {
+      // 1. فحص ما إذا كان النص المدخل هو كود المدير
+      const res = await fetch('/api/settings/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: searchTerm.trim() })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        // التوجيه المباشر للوحة المدير لو الكود صح
+        window.location.href = data.redirectUrl || '/admin';
+        return;
+      }
+    } catch (err) {
+      console.error('حدث خطأ أثناء فحص كود المدير:', err);
+    }
+
+    // 2. إذا لم يكن كود مدير، نفّذ بحث المنتجات العادي (استبدل هذا الجزء بكونت البحث الخاص بك لو كان مختلفاً)
+    if (typeof fetchProducts === 'function') {
+      fetchProducts(searchTerm);
+    }
+  }
+
+  // ربط الدالة بحقل البحث (مثال لو حقل البحث إشاره input أو form)
+  document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.querySelector('#searchInput') || document.querySelector('input[type="search"]');
+    const searchForm = document.querySelector('#searchForm') || document.querySelector('form');
+
+    if (searchForm) {
+      searchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const query = searchInput ? searchInput.value : '';
+        handleSearch(query);
+      });
+    }
+  });
+  </script>
 </body>
 </html>
