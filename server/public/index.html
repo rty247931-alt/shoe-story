@@ -175,8 +175,10 @@ footer a{color:var(--accent);font-weight:700;}
 .invoice-note{margin-top:22px;padding-top:14px;border-top:1px dashed var(--border);text-align:center;font-size:14px;color:var(--primary-dark);font-weight:700;}
 @media print{
   body *{visibility:hidden;}
-  #invoiceArea,#invoiceArea *{visibility:visible;}
-  #invoiceArea{position:absolute;top:0;left:0;width:100%;padding:10px;}
+  #invoiceOverlay,#invoiceOverlay *{visibility:visible;}
+  #invoiceOverlay{position:static!important;display:block!important;background:none!important;padding:0!important;inset:auto!important;}
+  #invoiceOverlay .modal{position:static!important;max-height:none!important;overflow:visible!important;max-width:100%!important;box-shadow:none!important;border:none!important;padding:0!important;margin:0!important;}
+  #invoiceArea{position:static!important;width:100%!important;padding:10px!important;}
   .close-x,#invoicePrintBtn{display:none!important;}
 }
 </style>
@@ -309,7 +311,6 @@ footer a{color:var(--accent);font-weight:700;}
     <div class="field"><label>البريد الإلكتروني</label><input id="loginEmail"></div>
     <div class="field"><label>كلمة المرور</label><input id="loginPass" type="password"></div>
     <button class="btn" onclick="tryLogin()">دخول</button>
-    <div class="hint">بيانات الدخول الافتراضية:<br>البريد: admin@store.com — كلمة المرور: admin123<br>غيّرهم أول ما تدخل من تبويب "الحساب".</div>
   </div>
 </div>
 
@@ -359,6 +360,13 @@ footer a{color:var(--accent);font-weight:700;}
         <h3 style="margin-top:0;">فاتورة الطلب</h3>
         <p style="color:var(--ink-soft);font-size:13px;margin-top:-6px;">رسالة التحية اللي هتظهر أسفل فاتورة كل طلب (للطباعة ولصقها على الكرتونة).</p>
         <div class="field"><label>رسالة التحية</label><input id="setInvoiceNote"></div>
+        <button class="btn" onclick="saveSettings()">حفظ</button>
+      </div>
+
+      <div class="admin-card">
+        <h3 style="margin-top:0;">كود الدخول السري للإدارة</h3>
+        <p style="color:var(--ink-soft);font-size:13px;margin-top:-6px;">اكتب الكود ده في خانة البحث بالمتجر (بدل ما تكتب اسم منتج) عشان تفتح صفحة دخول المدير من غير ما تحتاج تكتب "admin/" في رابط الموقع. غيّره لأي كلمة أو رقم تحبه، وحافظ عليه سري.</p>
+        <div class="field"><label>الكود</label><input id="setAccessCode"></div>
         <button class="btn" onclick="saveSettings()">حفظ</button>
       </div>
     </div>
@@ -511,7 +519,15 @@ function renderProducts() {
     </div>
   `).join('');
 }
-document.getElementById('searchInput').addEventListener('input', renderProducts);
+document.getElementById('searchInput').addEventListener('input', function () {
+  const val = this.value.trim();
+  if (SETTINGS.admin_access_code && val && val === SETTINGS.admin_access_code) {
+    this.value = '';
+    openAdmin();
+    return;
+  }
+  renderProducts();
+});
 
 /* ===================== Product modal ===================== */
 function openProduct(id) {
@@ -793,9 +809,6 @@ function backToStore(e) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('adminShell').style.display = 'none';
   document.getElementById('storeView').style.display = 'block';
-  if (window.location.pathname.replace(/\/$/, '') === '/admin') {
-    window.history.replaceState({}, '', '/');
-  }
 }
 async function tryLogin() {
   const email = document.getElementById('loginEmail').value.trim();
@@ -849,6 +862,7 @@ function fillSettingsForm() {
   document.getElementById('setPayment').value = s.payment_info || '';
   document.getElementById('setShipping').value = s.shipping_info || '';
   document.getElementById('setInvoiceNote').value = s.invoice_note || '';
+  document.getElementById('setAccessCode').value = s.admin_access_code || '';
 }
 function placeholderImg(color, emoji) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="${color}"/><text x="50%" y="50%" font-size="90" text-anchor="middle" dominant-baseline="central">${emoji}</text></svg>`;
@@ -872,7 +886,8 @@ async function saveSettings() {
     hero_title: document.getElementById('setHero').value.trim(),
     payment_info: document.getElementById('setPayment').value.trim(),
     shipping_info: document.getElementById('setShipping').value.trim(),
-    invoice_note: document.getElementById('setInvoiceNote').value.trim()
+    invoice_note: document.getElementById('setInvoiceNote').value.trim(),
+    admin_access_code: document.getElementById('setAccessCode').value.trim() || 'MGR-2026'
   };
   const logoFile = document.getElementById('logoFile').files[0];
   const bgFile = document.getElementById('bgFile').files[0];
@@ -1085,10 +1100,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
   renderProducts();
   updateCartBadge();
   await tryRestoreCustomer();
-  if (window.location.pathname.replace(/\/$/, '') === '/admin') {
-    openAdmin();
-  }
 })();
 </script>
 </body>
-  </html>
+</html>
