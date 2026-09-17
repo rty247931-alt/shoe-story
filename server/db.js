@@ -43,6 +43,7 @@ async function initDb() {
       invoice_note text DEFAULT 'شكرًا لتسوقكم معنا، نتمنى نشوفكم تاني قريب 🌸',
       payment_info text DEFAULT 'الدفع عند الاستلام، أو تحويل على محفظة فودافون كاش: 01000000000',
       shipping_info text DEFAULT 'التوصيل من 2 إلى 4 أيام عمل داخل الجمهورية، ومجاني للطلبات فوق 1000 ج.م.',
+      admin_access_code text DEFAULT 'MGR-2026',
       CHECK (id = 1)
     );
   `);
@@ -91,6 +92,7 @@ async function initDb() {
     );
   `);
   await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id int REFERENCES customers(id);`);
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS admin_access_code text DEFAULT 'MGR-2026';`);
 
   // Seed admin
   const adminCount = await pool.query('SELECT COUNT(*) FROM admin');
