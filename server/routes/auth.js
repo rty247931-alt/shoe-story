@@ -14,7 +14,7 @@ router.post('/login', async (req, res) => {
   const admin = result.rows[0];
   const ok = await bcrypt.compare(password, admin.password_hash);
   if (!ok) return res.status(401).json({ error: 'بيانات الدخول غير صحيحة' });
-  const token = jwt.sign({ id: admin.id, email: admin.email }, process.env.JWT_SECRET || 'dev_secret_change_me', { expiresIn: '7d' });
+  const token = jwt.sign({ id: admin.id, email: admin.email, role: 'admin' }, process.env.JWT_SECRET || 'dev_secret_change_me', { expiresIn: '7d' });
   res.json({ token, email: admin.email });
 });
 
