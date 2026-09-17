@@ -194,6 +194,7 @@ footer a{color:var(--accent);font-weight:700;}
       </div>
       <div class="header-actions">
         <button class="icon-btn" onclick="openCart()">🛒 السلة<span class="badge" id="cartBadge">0</span></button>
+        <button class="icon-btn" id="accountBtn" onclick="openAccount()">👤 حسابي</button>
       </div>
     </div>
     <div class="tagline" id="taglineBox" style="max-width:1200px;margin:2px auto 0;"></div>
@@ -279,6 +280,14 @@ footer a{color:var(--accent);font-weight:700;}
     <h2>تم استلام طلبك!</h2>
     <p style="color:var(--ink-soft);">رقم الطلب: <b id="orderNum"></b><br>هنتواصل معاك قريب لتأكيد التوصيل.</p>
     <button class="btn" onclick="closeOverlay('successOverlay')">متابعة التسوق</button>
+  </div>
+</div>
+
+<!-- Account modal (customer login/register/profile/orders) -->
+<div class="overlay" id="accountOverlay">
+  <div class="modal" id="accountModal" style="max-width:480px;">
+    <button class="close-x" onclick="closeOverlay('accountOverlay')">✕</button>
+    <div id="accountModalBody"></div>
   </div>
 </div>
 
@@ -413,9 +422,12 @@ footer a{color:var(--accent);font-weight:700;}
 /* ===================== API layer ===================== */
 const API = '/api';
 let adminToken = localStorage.getItem('admin_token') || '';
+let customerToken = localStorage.getItem('customer_token') || '';
+let CUSTOMER = null;
 let SETTINGS = {};
 let PRODUCTS = [];
 let ORDERS = [];
+let CUSTOMER_ORDERS = [];
 let cart = JSON.parse(localStorage.getItem('mystore_cart') || '{}');
 let currentCategory = 'الكل';
 let modalProduct = null;
@@ -431,6 +443,22 @@ async function api(path, opts = {}) {
   const res = await fetch(API + path, {
     method: opts.method || 'GET',
     headers: authHeaders(),
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'حصل خطأ، حاول تاني');
+  return data;
+}
+function customerHeaders(json = true) {
+  const h = {};
+  if (json) h['Content-Type'] = 'application/json';
+  if (customerToken) h['Authorization'] = 'Bearer ' + customerToken;
+  return h;
+}
+async function capi(path, opts = {}) {
+  const res = await fetch(API + path, {
+    method: opts.method || 'GET',
+    headers: customerHeaders(),
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   const data = await res.json().catch(() => ({}));
@@ -526,14 +554,29 @@ function updateCartBadge() {
   const count = Object.values(cart).reduce((a, b) => a + b, 0);
   document.getElementById('cartBadge').textContent = count;
 }
+function cleanCart() {
+  let removed = 0;
+  Object.keys(cart).forEach(id => {
+    const exists = PRODUCTS.some(p => p.id === Number(id));
+    if (!exists) { delete cart[id]; removed++; }
+  });
+  if (removed > 0) saveCart();
+  return removed;
+}
 function openCart() { renderCart(); document.getElementById('cartOverlay').classList.add('show'); document.getElementById('cartDrawer').classList.add('show'); }
 function closeCart() { document.getElementById('cartOverlay').classList.remove('show'); document.getElementById('cartDrawer').classList.remove('show'); }
 function renderCart() {
+  const removed = cleanCart();
   const ids = Object.keys(cart).filter(id => cart[id] > 0);
   const body = document.getElementById('cartBody');
-  if (ids.length === 0) { body.innerHTML = '<div class="empty">السلة فارغة حالياً.</div>'; document.getElementById('cartFooter').innerHTML = ''; return; }
+  if (removed > 0) {
+    body.innerHTML = `<div class="msg err">تم حذف ${removed} منتج من السلة لأنه لم يعد متوفرًا حاليًا.</div>`;
+  } else {
+    body.innerHTML = '';
+  }
+  if (ids.length === 0) { body.innerHTML += '<div class="empty">السلة فارغة حالياً.</div>'; document.getElementById('cartFooter').innerHTML = ''; return; }
   let total = 0;
-  body.innerHTML = ids.map(id => {
+  body.innerHTML += ids.map(id => {
     const p = PRODUCTS.find(x => x.id === Number(id));
     if (!p) return '';
     const sub = p.price * cart[id];
@@ -572,6 +615,11 @@ function openCheckout() {
   ids.forEach(id => { const p = PRODUCTS.find(x => x.id === Number(id)); if (p) total += p.price * cart[id]; });
   document.getElementById('coTotal').textContent = fmt(total);
   document.getElementById('checkoutMsg').innerHTML = '';
+  if (CUSTOMER) {
+    document.getElementById('coName').value = CUSTOMER.name || '';
+    document.getElementById('coPhone').value = CUSTOMER.phone || '';
+    document.getElementById('coAddress').value = CUSTOMER.address || '';
+  }
   closeCart();
   document.getElementById('checkoutOverlay').classList.add('show');
 }
@@ -585,7 +633,8 @@ async function submitOrder() {
   }
   const items = Object.keys(cart).filter(id => cart[id] > 0).map(id => ({ id: Number(id), qty: cart[id] }));
   try {
-    const order = await api('/orders', { method: 'POST', body: { name, phone, address, pay: document.getElementById('coPay').value, items } });
+    const call = customerToken ? capi : api;
+    const order = await call('/orders', { method: 'POST', body: { name, phone, address, pay: document.getElementById('coPay').value, items } });
     cart = {}; saveCart();
     ['coName', 'coPhone', 'coAddress'].forEach(id => document.getElementById(id).value = '');
     closeOverlay('checkoutOverlay');
@@ -595,6 +644,136 @@ async function submitOrder() {
     renderProducts();
   } catch (e) {
     document.getElementById('checkoutMsg').innerHTML = `<div class="msg err">${e.message}</div>`;
+  }
+}
+
+/* ===================== Customer account ===================== */
+let accountView = 'login';
+
+function updateAccountBtn() {
+  document.getElementById('accountBtn').textContent = CUSTOMER ? ('👤 ' + CUSTOMER.name.split(' ')[0]) : '👤 حسابي';
+}
+async function tryRestoreCustomer() {
+  if (!customerToken) return;
+  try { CUSTOMER = await capi('/customers/me'); updateAccountBtn(); }
+  catch (e) { customerToken = ''; localStorage.removeItem('customer_token'); }
+}
+function openAccount() {
+  accountView = CUSTOMER ? 'profile' : 'login';
+  renderAccountModal();
+  document.getElementById('accountOverlay').classList.add('show');
+}
+function switchAccountView(v) { accountView = v; renderAccountModal(); }
+function renderAccountModal() {
+  const body = document.getElementById('accountModalBody');
+  if (accountView === 'login') {
+    body.innerHTML = `
+      <h2>تسجيل الدخول</h2>
+      <div id="custMsg"></div>
+      <div class="field"><label>البريد الإلكتروني</label><input id="custEmail"></div>
+      <div class="field"><label>كلمة المرور</label><input id="custPass" type="password"></div>
+      <button class="btn" onclick="customerLogin()">دخول</button>
+      <p class="hint">معندكش حساب؟ <a href="#" onclick="switchAccountView('register');return false;" style="color:var(--primary);font-weight:700;">سجّل دلوقتي</a></p>
+    `;
+  } else if (accountView === 'register') {
+    body.innerHTML = `
+      <h2>حساب جديد</h2>
+      <div id="custMsg"></div>
+      <div class="field"><label>الاسم بالكامل</label><input id="regName"></div>
+      <div class="field"><label>البريد الإلكتروني</label><input id="regEmail"></div>
+      <div class="field"><label>رقم الهاتف</label><input id="regPhone"></div>
+      <div class="field"><label>العنوان (اختياري)</label><input id="regAddress"></div>
+      <div class="field"><label>كلمة المرور</label><input id="regPass" type="password"></div>
+      <button class="btn" onclick="customerRegister()">إنشاء الحساب</button>
+      <p class="hint">عندك حساب بالفعل؟ <a href="#" onclick="switchAccountView('login');return false;" style="color:var(--primary);font-weight:700;">سجّل دخول</a></p>
+    `;
+  } else if (accountView === 'profile') {
+    body.innerHTML = `
+      <h2>حسابي</h2>
+      <div id="custMsg"></div>
+      <div class="field"><label>الاسم</label><input id="profName" value="${CUSTOMER.name || ''}"></div>
+      <div class="field"><label>البريد الإلكتروني</label><input value="${CUSTOMER.email || ''}" disabled style="opacity:.6;"></div>
+      <div class="field"><label>رقم الهاتف</label><input id="profPhone" value="${CUSTOMER.phone || ''}"></div>
+      <div class="field"><label>العنوان</label><input id="profAddress" value="${CUSTOMER.address || ''}"></div>
+      <div class="field"><label>كلمة مرور جديدة (اختياري)</label><input id="profPass" type="password" placeholder="اتركه فارغًا لعدم التغيير"></div>
+      <button class="btn" onclick="customerSaveProfile()">حفظ التعديلات</button>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn secondary" onclick="switchAccountView('orders')">📦 طلباتي</button>
+        <button class="btn outline" onclick="customerLogout()">تسجيل الخروج</button>
+      </div>
+    `;
+  } else if (accountView === 'orders') {
+    body.innerHTML = `<h2>طلباتي</h2><div id="myOrdersList">جاري التحميل...</div>
+      <button class="btn outline" style="margin-top:12px;" onclick="switchAccountView('profile')">↩ رجوع للحساب</button>`;
+    loadMyOrders();
+  }
+}
+async function customerRegister() {
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const phone = document.getElementById('regPhone').value.trim();
+  const address = document.getElementById('regAddress').value.trim();
+  const password = document.getElementById('regPass').value;
+  try {
+    const data = await capi('/customers/register', { method: 'POST', body: { name, email, phone, address, password } });
+    customerToken = data.token; localStorage.setItem('customer_token', customerToken);
+    CUSTOMER = data.customer; updateAccountBtn();
+    switchAccountView('profile');
+  } catch (e) { document.getElementById('custMsg').innerHTML = `<div class="msg err">${e.message}</div>`; }
+}
+async function customerLogin() {
+  const email = document.getElementById('custEmail').value.trim();
+  const password = document.getElementById('custPass').value;
+  try {
+    const data = await capi('/customers/login', { method: 'POST', body: { email, password } });
+    customerToken = data.token; localStorage.setItem('customer_token', customerToken);
+    CUSTOMER = data.customer; updateAccountBtn();
+    switchAccountView('profile');
+  } catch (e) { document.getElementById('custMsg').innerHTML = `<div class="msg err">${e.message}</div>`; }
+}
+async function customerSaveProfile() {
+  const name = document.getElementById('profName').value.trim();
+  const phone = document.getElementById('profPhone').value.trim();
+  const address = document.getElementById('profAddress').value.trim();
+  const password = document.getElementById('profPass').value;
+  const body = { name, phone, address };
+  if (password) { if (password.length < 4) { document.getElementById('custMsg').innerHTML = '<div class="msg err">كلمة المرور لازم تكون 4 أحرف على الأقل.</div>'; return; } body.password = password; }
+  try {
+    CUSTOMER = await capi('/customers/me', { method: 'PUT', body });
+    updateAccountBtn();
+    document.getElementById('custMsg').innerHTML = '<div class="msg ok">تم حفظ التعديلات بنجاح.</div>';
+  } catch (e) { document.getElementById('custMsg').innerHTML = `<div class="msg err">${e.message}</div>`; }
+}
+function customerLogout() {
+  customerToken = ''; CUSTOMER = null;
+  localStorage.removeItem('customer_token');
+  updateAccountBtn();
+  closeOverlay('accountOverlay');
+}
+async function loadMyOrders() {
+  try {
+    CUSTOMER_ORDERS = await capi('/customers/me/orders');
+    const el = document.getElementById('myOrdersList');
+    if (!el) return;
+    if (CUSTOMER_ORDERS.length === 0) { el.innerHTML = '<div class="empty">لسه معملتش أي طلب.</div>'; return; }
+    el.innerHTML = CUSTOMER_ORDERS.map(o => `
+      <div class="order-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+          <div>
+            <div class="pname">${o.order_number}</div>
+            <div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px;">${new Date(o.created_at).toLocaleString('ar-EG')}</div>
+            <div style="font-size:12.5px;margin-top:4px;">${o.items.map(it => it.product_name + ' ×' + it.qty).join('، ')}</div>
+          </div>
+          <div style="text-align:left;">
+            <span class="status-badge ${STATUS_CLASS[o.status]}">${o.status}</span>
+            <div class="pprice" style="margin-top:6px;">${fmt(o.total)}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    const el = document.getElementById('myOrdersList');
+    if (el) el.innerHTML = `<div class="msg err">${e.message}</div>`;
   }
 }
 
@@ -905,6 +1084,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
   await loadProducts();
   renderProducts();
   updateCartBadge();
+  await tryRestoreCustomer();
   if (window.location.pathname.replace(/\/$/, '') === '/admin') {
     openAdmin();
   }
