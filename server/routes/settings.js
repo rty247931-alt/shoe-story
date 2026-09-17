@@ -9,6 +9,28 @@ router.get('/', async (req, res) => {
   res.json(result.rows[0]);
 });
 
+// Endpoint للتحقق من كود المدير عبر شريط البحث
+router.post('/verify-code', async (req, res) => {
+  try {
+    const { code } = req.body || {};
+    if (!code) {
+      return res.json({ success: false, message: 'يرجى إدخال الكود' });
+    }
+
+    const result = await pool.query('SELECT admin_access_code FROM settings WHERE id=1');
+    const dbCode = result.rows[0]?.admin_access_code;
+
+    if (code.trim() === dbCode) {
+      return res.json({ success: true, redirectUrl: '/admin' });
+    } else {
+      return res.json({ success: false, message: 'الكود غير صحيح' });
+    }
+  } catch (err) {
+    console.error('Error verifying admin code:', err);
+    res.status(500).json({ success: false, message: 'حدث خطأ في السيرفر' });
+  }
+});
+
 router.put('/', requireAuth, async (req, res) => {
   const b = req.body || {};
   const nn = v => (v === undefined ? null : v);
