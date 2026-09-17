@@ -21,9 +21,10 @@ router.put('/', requireAuth, async (req, res) => {
       bg=COALESCE($5, bg),
       invoice_note=COALESCE($6, invoice_note),
       payment_info=COALESCE($7, payment_info),
-      shipping_info=COALESCE($8, shipping_info)
+      shipping_info=COALESCE($8, shipping_info),
+      admin_access_code=COALESCE($9, admin_access_code)
      WHERE id=1 RETURNING *`,
-    [nn(b.site_name), nn(b.tagline), nn(b.hero_title), nn(b.logo), nn(b.bg), nn(b.invoice_note), nn(b.payment_info), nn(b.shipping_info)]
+    [nn(b.site_name), nn(b.tagline), nn(b.hero_title), nn(b.logo), nn(b.bg), nn(b.invoice_note), nn(b.payment_info), nn(b.shipping_info), nn(b.admin_access_code)]
   );
   res.json(result.rows[0]);
 });
