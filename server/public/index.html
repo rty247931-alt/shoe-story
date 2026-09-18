@@ -302,18 +302,6 @@ footer a{color:var(--accent);font-weight:700;}
   </div>
 </div>
 
-<!-- ============ ADMIN LOGIN ============ -->
-<div class="login-screen" id="loginScreen" style="display:none;">
-  <div class="login-box">
-    <a href="#" class="top-back" onclick="backToStore(event)">← رجوع للمتجر</a>
-    <h2 style="margin-top:0;">دخول لوحة التحكم</h2>
-    <div id="loginMsg"></div>
-    <div class="field"><label>البريد الإلكتروني</label><input id="loginEmail"></div>
-    <div class="field"><label>كلمة المرور</label><input id="loginPass" type="password"></div>
-    <button class="btn" onclick="tryLogin()">دخول</button>
-  </div>
-</div>
-
 <!-- ============ ADMIN PANEL ============ -->
 <div class="admin-shell" id="adminShell" style="display:none;">
   <div class="admin-side">
@@ -360,13 +348,6 @@ footer a{color:var(--accent);font-weight:700;}
         <h3 style="margin-top:0;">فاتورة الطلب</h3>
         <p style="color:var(--ink-soft);font-size:13px;margin-top:-6px;">رسالة التحية اللي هتظهر أسفل فاتورة كل طلب (للطباعة ولصقها على الكرتونة).</p>
         <div class="field"><label>رسالة التحية</label><input id="setInvoiceNote"></div>
-        <button class="btn" onclick="saveSettings()">حفظ</button>
-      </div>
-
-      <div class="admin-card">
-        <h3 style="margin-top:0;">كود الدخول السري للإدارة</h3>
-        <p style="color:var(--ink-soft);font-size:13px;margin-top:-6px;">اكتب الكود ده في خانة البحث بالمتجر (بدل ما تكتب اسم منتج) عشان تفتح صفحة دخول المدير من غير ما تحتاج تكتب "admin/" في رابط الموقع. غيّره لأي كلمة أو رقم تحبه، وحافظ عليه سري.</p>
-        <div class="field"><label>الكود</label><input id="setAccessCode"></div>
         <button class="btn" onclick="saveSettings()">حفظ</button>
       </div>
     </div>
@@ -519,15 +500,7 @@ function renderProducts() {
     </div>
   `).join('');
 }
-document.getElementById('searchInput').addEventListener('input', function () {
-  const val = this.value.trim();
-  if (SETTINGS.admin_access_code && val && val === SETTINGS.admin_access_code) {
-    this.value = '';
-    openAdmin();
-    return;
-  }
-  renderProducts();
-});
+document.getElementById('searchInput').addEventListener('input', renderProducts);
 
 /* ===================== Product modal ===================== */
 function openProduct(id) {
@@ -675,6 +648,7 @@ async function tryRestoreCustomer() {
   catch (e) { customerToken = ''; localStorage.removeItem('customer_token'); }
 }
 function openAccount() {
+  if (adminToken) { showAdminPanel(); return; }
   accountView = CUSTOMER ? 'profile' : 'login';
   renderAccountModal();
   document.getElementById('accountOverlay').classList.add('show');
@@ -688,7 +662,7 @@ function renderAccountModal() {
       <div id="custMsg"></div>
       <div class="field"><label>البريد الإلكتروني</label><input id="custEmail"></div>
       <div class="field"><label>كلمة المرور</label><input id="custPass" type="password"></div>
-      <button class="btn" onclick="customerLogin()">دخول</button>
+      <button class="btn" onclick="unifiedLogin()">دخول</button>
       <p class="hint">معندكش حساب؟ <a href="#" onclick="switchAccountView('register');return false;" style="color:var(--primary);font-weight:700;">سجّل دلوقتي</a></p>
     `;
   } else if (accountView === 'register') {
@@ -737,15 +711,29 @@ async function customerRegister() {
     switchAccountView('profile');
   } catch (e) { document.getElementById('custMsg').innerHTML = `<div class="msg err">${e.message}</div>`; }
 }
-async function customerLogin() {
+async function unifiedLogin() {
   const email = document.getElementById('custEmail').value.trim();
   const password = document.getElementById('custPass').value;
+  if (!email || !password) { document.getElementById('custMsg').innerHTML = '<div class="msg err">من فضلك أدخل البريد وكلمة المرور.</div>'; return; }
+  // Try admin credentials first
+  try {
+    const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+    adminToken = data.token;
+    localStorage.setItem('admin_token', adminToken);
+    document.getElementById('custEmail').value = ''; document.getElementById('custPass').value = '';
+    closeOverlay('accountOverlay');
+    showAdminPanel();
+    return;
+  } catch (e) { /* not an admin account, try as customer below */ }
+  // Try customer credentials
   try {
     const data = await capi('/customers/login', { method: 'POST', body: { email, password } });
     customerToken = data.token; localStorage.setItem('customer_token', customerToken);
     CUSTOMER = data.customer; updateAccountBtn();
     switchAccountView('profile');
-  } catch (e) { document.getElementById('custMsg').innerHTML = `<div class="msg err">${e.message}</div>`; }
+  } catch (e) {
+    document.getElementById('custMsg').innerHTML = '<div class="msg err">البريد الإلكتروني أو كلمة المرور غير صحيحة.</div>';
+  }
 }
 async function customerSaveProfile() {
   const name = document.getElementById('profName').value.trim();
@@ -798,31 +786,10 @@ async function loadSettings() { SETTINGS = await api('/settings'); renderBrand()
 async function loadProducts() { PRODUCTS = await api('/products'); PRODUCTS.forEach(p => p.price = Number(p.price)); renderCategories(); }
 
 /* ===================== Admin: auth & nav ===================== */
-function openAdmin(e) {
-  if (e) e.preventDefault();
-  document.getElementById('storeView').style.display = 'none';
-  if (adminToken) { showAdminPanel(); }
-  else { document.getElementById('loginScreen').style.display = 'flex'; }
-}
 function backToStore(e) {
   if (e) e.preventDefault();
-  document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('adminShell').style.display = 'none';
   document.getElementById('storeView').style.display = 'block';
-}
-async function tryLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const pass = document.getElementById('loginPass').value;
-  try {
-    const data = await api('/auth/login', { method: 'POST', body: { email, password: pass } });
-    adminToken = data.token;
-    localStorage.setItem('admin_token', adminToken);
-    document.getElementById('loginMsg').innerHTML = '';
-    document.getElementById('loginEmail').value = ''; document.getElementById('loginPass').value = '';
-    showAdminPanel();
-  } catch (e) {
-    document.getElementById('loginMsg').innerHTML = `<div class="msg err">${e.message}</div>`;
-  }
 }
 function logoutAdmin() {
   adminToken = '';
@@ -831,7 +798,7 @@ function logoutAdmin() {
   document.getElementById('storeView').style.display = 'block';
 }
 async function showAdminPanel() {
-  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('storeView').style.display = 'none';
   document.getElementById('adminShell').style.display = 'flex';
   fillSettingsForm();
   renderProdList();
@@ -839,8 +806,10 @@ async function showAdminPanel() {
     await loadOrders();
   } catch (e) {
     logoutAdmin();
-    document.getElementById('loginScreen').style.display = 'flex';
-    document.getElementById('loginMsg').innerHTML = '<div class="msg err">انتهت الجلسة، سجّل دخول تاني.</div>';
+    accountView = 'login';
+    renderAccountModal();
+    document.getElementById('custMsg').innerHTML = '<div class="msg err">انتهت الجلسة، سجّل دخول تاني.</div>';
+    document.getElementById('accountOverlay').classList.add('show');
     return;
   }
   fillAccountForm();
@@ -862,7 +831,6 @@ function fillSettingsForm() {
   document.getElementById('setPayment').value = s.payment_info || '';
   document.getElementById('setShipping').value = s.shipping_info || '';
   document.getElementById('setInvoiceNote').value = s.invoice_note || '';
-  document.getElementById('setAccessCode').value = s.admin_access_code || '';
 }
 function placeholderImg(color, emoji) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="${color}"/><text x="50%" y="50%" font-size="90" text-anchor="middle" dominant-baseline="central">${emoji}</text></svg>`;
@@ -886,8 +854,7 @@ async function saveSettings() {
     hero_title: document.getElementById('setHero').value.trim(),
     payment_info: document.getElementById('setPayment').value.trim(),
     shipping_info: document.getElementById('setShipping').value.trim(),
-    invoice_note: document.getElementById('setInvoiceNote').value.trim(),
-    admin_access_code: document.getElementById('setAccessCode').value.trim() || 'MGR-2026'
+    invoice_note: document.getElementById('setInvoiceNote').value.trim()
   };
   const logoFile = document.getElementById('logoFile').files[0];
   const bgFile = document.getElementById('bgFile').files[0];
@@ -1088,7 +1055,12 @@ async function saveAccount() {
     await api('/auth/account', { method: 'PUT', body });
     document.getElementById('accMsg').innerHTML = '<div class="msg ok">تم تحديث بيانات الحساب بنجاح، سجّل دخول تاني بالبيانات الجديدة.</div>';
     document.getElementById('accPass').value = ''; document.getElementById('accPass2').value = '';
-    setTimeout(() => { logoutAdmin(); openAdmin(); }, 1500);
+    setTimeout(() => {
+      logoutAdmin();
+      accountView = 'login';
+      renderAccountModal();
+      document.getElementById('accountOverlay').classList.add('show');
+    }, 1500);
   } catch (e) { document.getElementById('accMsg').innerHTML = `<div class="msg err">${e.message}</div>`; }
 }
 
@@ -1102,48 +1074,6 @@ document.getElementById('year').textContent = new Date().getFullYear();
   await tryRestoreCustomer();
 })();
 </script>
-  <script>
-  // دالة التعامل مع البحث عند الضغط على زر البحث أو الإدخال
-  async function handleSearch(searchTerm) {
-    if (!searchTerm) return;
-
-    try {
-      // 1. فحص ما إذا كان النص المدخل هو كود المدير
-      const res = await fetch('/api/settings/verify-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: searchTerm.trim() })
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        // التوجيه المباشر للوحة المدير لو الكود صح
-        window.location.href = data.redirectUrl || '/admin';
-        return;
-      }
-    } catch (err) {
-      console.error('حدث خطأ أثناء فحص كود المدير:', err);
-    }
-
-    // 2. إذا لم يكن كود مدير، نفّذ بحث المنتجات العادي (استبدل هذا الجزء بكونت البحث الخاص بك لو كان مختلفاً)
-    if (typeof fetchProducts === 'function') {
-      fetchProducts(searchTerm);
-    }
-  }
-
-  // ربط الدالة بحقل البحث (مثال لو حقل البحث إشاره input أو form)
-  document.addEventListener('DOMContentLoaded', () => {
-    const searchInput = document.querySelector('#searchInput') || document.querySelector('input[type="search"]');
-    const searchForm = document.querySelector('#searchForm') || document.querySelector('form');
-
-    if (searchForm) {
-      searchForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const query = searchInput ? searchInput.value : '';
-        handleSearch(query);
-      });
-    }
-  });
-  </script>
 </body>
 </html>
+
