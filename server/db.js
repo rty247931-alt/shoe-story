@@ -93,7 +93,9 @@ async function initDb() {
   `);
   await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id int REFERENCES customers(id);`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS admin_access_code text DEFAULT 'MGR-2026';`);
-
+const current = await pool.query('SELECT email FROM admin');
+console.log('📧 الإيميل:', current.rows.map(r => r.email).join(', '));
+  
   // Seed admin
   const adminCount = await pool.query('SELECT COUNT(*) FROM admin');
   if (parseInt(adminCount.rows[0].count) === 0) {
